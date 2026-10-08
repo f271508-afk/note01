@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>雲端備忘筆記本 (分類標籤與置頂)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <header class="bg-indigo-600 text-white shadow-md sticky top-0 z-50">
+        <div class="max-w-5xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="bg-white/10 p-2.5 rounded-xl backdrop-blur-sm">
+                    <i class="fa-solid fa-note-sticky text-2xl text-yellow-300"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight">雲端備忘筆記本</h1>
+                    <p class="text-xs text-indigo-200">分類標籤、釘選置頂 & Google Sheets 雲端同步</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-2 w-full sm:w-auto justify-end">
+                <button onclick="openConfigModal()" class="bg-indigo-700 hover:bg-indigo-800 text-xs px-3 py-2 rounded-lg font-medium transition flex items-center gap-1.5 border border-indigo-500 shadow-sm">
+                    <i class="fa-solid fa-gear"></i> 設定 Apps Script API
+                </button>
+                <button onclick="syncWithCloud()" id="syncBtn" class="bg-emerald-500 hover:bg-emerald-600 text-white text-xs px-3 py-2 rounded-lg font-medium transition flex items-center gap-1.5 shadow-sm">
+                    <i class="fa-solid fa-rotate" id="syncIcon"></i> 同步雲端
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-5xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        <section class="md:col-span-1 bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-fit sticky top-24">
+            <h2 class="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2" id="formHeading">
+                <i class="fa-solid fa-pen-nib text-indigo-500"></i> 新增備忘筆記
+            </h2>
+            
+            <form id="noteForm" onsubmit="handleFormSubmit(event)" class="space-y-4">
+                <input type="hidden" id="editingNoteId" value="">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">筆記標題</label>
+                    <input type="text" id="noteTitle" required placeholder="輸入標題..." 
+                        class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">分類標籤</label>
+                    <select id="noteCategory" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                        <option value="工作">💼 工作</option>
+                        <option value="生活">🏠 生活</option>
+                        <option value="學習">📚 學習</option>
+                        <option value="靈感">💡 靈感</option>
+                        <option value="其他">📌 其他</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">筆記內容</label>
+                    <textarea id="noteContent" rows="4" required placeholder="寫點什麼..." 
+                        class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition resize-none"></textarea>
+                </div>
+
+                <div class="flex items-center gap-2 py-1">
+                    <input type="checkbox" id="notePinned" class="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500">
+                    <label for="notePinned" class="text-xs font-semibold text-slate-700 cursor-pointer flex items-center gap-1">
+                        <i class="fa-solid fa-thumbtack text-amber-500"></i> 釘選置頂顯示
+                    </label>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">上傳相片 (可選)</label>
+                    <div class="flex items-center gap-2">
+                        <label class="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-2 rounded-xl border border-slate-200 transition flex items-center gap-2 flex-grow justify-center font-medium">
+                            <i class="fa-solid fa-camera text-indigo-500"></i> <span id="fileNameLabel">選擇圖片檔案</span>
+                            <input type="file" id="noteImage" accept="image/*" onchange="previewImage(event)" class="hidden">
+                        </label>
+                        <button type="button" id="clearImageBtn" onclick="clearImage()" class="hidden text-rose-500 hover:text-rose-700 p-2 text-sm">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                    <div id="imagePreviewContainer" class="mt-2 hidden relative rounded-xl overflow-hidden border border-slate-200 h-32 bg-slate-100">
+                        <img id="imagePreview" src="" alt="預覽" class="w-full h-full object-cover">
+                        <div id="imageProcessingOverlay" class="hidden absolute inset-0 bg-slate-900/50 flex items-center justify-center">
+                            <i class="fa-solid fa-spinner fa-spin text-white text-xl"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button type="submit" id="submitBtn" class="flex-grow bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-4 rounded-xl transition text-sm shadow-md shadow-indigo-100 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-plus"></i> <span id="submitBtnText">新增並記錄時間</span>
+                    </button>
+                    <button type="button" id="cancelEditBtn" onclick="cancelEditing()" class="hidden px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-medium rounded-xl transition">
+                        取消
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <section class="md:col-span-2 flex flex-col space-y-4">
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-3">
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div class="relative w-full sm:w-72">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                            <i class="fa-solid fa-magnifying-glass text-xs"></i>
+                        </span>
+                        <input type="text" id="searchInput" oninput="renderNotes()" placeholder="搜尋筆記內容或標題..." 
+                            class="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="openCategoryManager()" class="text-xs px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-tags text-indigo-500"></i> 管理標籤
+                        </button>
+                        <div class="text-xs text-slate-500 font-medium whitespace-nowrap" id="noteCountText">
+                            共 0 則筆記
+                        </div>
+                    </div>
+                </div>
+
+                <div id="categoryChipsContainer" class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                </div>
+            </div>
+
+            <div id="notesList" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            </div>
+
+            <div id="emptyState" class="hidden bg-white p-10 rounded-2xl border border-slate-100 text-center flex flex-col items-center justify-center space-y-3">
+                <div class="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center text-2xl">
+                    <i class="fa-solid fa-clipboard-question"></i>
+                </div>
+                <h3 class="text-base font-bold text-slate-700">目前沒有符合的筆記</h3>
+                <p class="text-xs text-slate-500 max-w-xs">快在左側新增您的備忘資料，或切換其他分類標籤檢視！</p>
+            </div>
+        </section>
+    </main>
+
+    <div id="configModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-cloud text-indigo-600"></i> Google Sheets API 設定
+                </h3>
+                <button onclick="closeConfigModal()" class="text-slate-400 hover:text-slate-600 text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <p class="text-xs text-slate-500 leading-relaxed">
+                請輸入您的 Google Apps Script 部署網址 (Web App URL)。若未設定，系統將僅使用瀏覽器本機儲存（LocalStorage），設定後可雙向同步至 Google 試算表。
+            </p>
+
+            <div class="space-y-1">
+                <label class="block text-xs font-semibold text-slate-600">Apps Script Web App 網址</label>
+                <input type="text" id="gasUrlInput" placeholder="https://script.google.com/macros/s/.../exec" 
+                    class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+            </div>
+
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 space-y-1">
+                <p class="font-bold"><i class="fa-solid fa-lightbulb"></i> 為什麼修改後一定要重新部署？以及 Google Apps Script 注意事項：</p>
+                <ol class="list-decimal list-inside space-y-1 text-amber-700">
+                    <li><strong>Google 網頁應用程式的快取機制</strong>：當您在 Apps Script 程式碼中修改邏輯（例如修正 `update` 動作的欄位寫入）時，<b>若不重新建立新版本部署，Google 仍會執行舊版的程式碼</b>，因此雲端試算表便不會接收到更新。</li>
+                    <li><strong>如何正確重新部署</strong>：
+                        <ul class="list-disc list-inside pl-4 mt-0.5 space-y-0.5">
+                            <li>進入您的 Google Apps Script 專案。</li>
+                            <li>點擊右上角藍色按鈕 <b>「部署」</b> > <b>「管理部署」</b> (Manage Deployments)。</li>
+                            <li>點擊左側的齒輪圖示，或點擊右上角 <b>「新增部署」</b> (New Deployment)。</li>
+                            <li>類型選擇 <b>「網頁應用程式」</b> (Web app)。</li>
+                            <li>版本 (Version) 請務必下拉選擇 <b>「新版本」</b> (New version)——這是最關鍵的步驟！</li>
+                            <li>執行身分維持<b>「我」</b>，誰可以存取 (Who has access) 務必選擇 <b>「任何人」</b> (Anyone)。</li>
+                            <li>點擊<b>「部署」</b>並授權，取得新的網頁應用程式網址（或維持舊網址若用管理部署覆蓋版號）。</li>
+                        </ul>
+                    </li>
+                </ol>
+                <button type="button" onclick="showGasCodeModal()" class="mt-2 text-indigo-600 hover:underline font-semibold flex items-center gap-1">
+                    <i class="fa-solid fa-code"></i> 查看最新修正的 GAS 程式碼範本
+                </button>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeConfigModal()" class="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">
+                    取消
+                </button>
+                <button onclick="saveConfig()" class="px-4 py-2 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition shadow-sm">
+                    儲存設定
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="gasCodeModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4 border border-slate-100">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-bold text-slate-800">Google Apps Script 完整程式碼範本</h3>
+                <button onclick="closeGasCodeModal()" class="text-slate-400 hover:text-slate-600 text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <p class="text-xs text-slate-500">請將以下完整程式碼清空並貼入您的 Google Apps Script 編輯器中，務必重新部署為「新的版本」且存取權限設為「任何人」：</p>
+            
+            <div class="relative">
+                <pre class="bg-slate-900 text-slate-200 text-xs p-3 rounded-xl overflow-x-auto h-56 select-all"><code>function doPost(e) {
+  var lock = LockService.getScriptLock();
+  lock.tryLock(15000);
+  try {
+    var rawData = e.postData.contents;
+    var data = JSON.parse(rawData);
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var rows = sheet.getDataRange().getValues();
+    
+    var action = String(data.action || "").trim();
+    var targetId = String(data.id || "").trim();
+    
+    Logger.log("Action received: " + action + ", Target ID: " + targetId);
+    
+    if (action === 'save') {
+      sheet.appendRow([
+        targetId, 
+        String(data.title || ""), 
+        String(data.content || ""), 
+        String(data.imageUrl || ""), 
+        String(data.timestamp || ""), 
+        String(data.category || "其他"), 
+        data.pinned ? "true" : "false"
+      ]);
+      return ContentService.createTextOutput(JSON.stringify({status: 'success', action: 'save'})).setMimeType(ContentService.MimeType.JSON);
+    } 
+    else if (action === 'update') {
+      var found = false;
+      for (var i = 1; i < rows.length; i++) {
+        var rowId = String(rows[i][0]).trim();
+        if (rowId === targetId) {
+          sheet.getRange(i + 1, 2, 1, 6).setValues([[
+            String(data.title || ""), 
+            String(data.content || ""), 
+            String(data.imageUrl || ""), 
+            String(data.timestamp || ""), 
+            String(data.category || "其他"), 
+            data.pinned ? "true" : "false"
+          ]]);
+          found = true;
+          break;
+        }
+      }
+      
+      if (!found) {
+        sheet.appendRow([
+          targetId, 
+          String(data.title || ""), 
+          String(data.content || ""), 
+          String(data.imageUrl || ""), 
+          String(data.timestamp || ""), 
+          String(data.category || "其他"), 
+          data.pinned ? "true" : "false"
+        ]);
+      }
+      
+      return ContentService.createTextOutput(JSON.stringify({status: 'success', action: 'update', found: found})).setMimeType(ContentService.MimeType.JSON);
+    } 
+    else if (action === 'delete') {
+      for (var i = 1; i < rows.length; i++) {
+        if (String(rows[i][0]).trim() === targetId) {
+          sheet.deleteRow(i + 1);
+          break;
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({status: 'success', action: 'delete'})).setMimeType(ContentService.MimeType.JSON);
+    } 
+    else if (action === 'updatePin') {
+      for (var i = 1; i < rows.length; i++) {
+        if (String(rows[i][0]).trim() === targetId) {
+          sheet.getRange(i + 1, 7).setValue(data.pinned ? "true" : "false");
+          break;
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({status: 'success', action: 'updatePin'})).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify({status: 'invalid_action', received: action})).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({status: 'error', message: err.toString()})).setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function doGet() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var rows = sheet.getDataRange().getValues();
+  var notes = [];
+  for (var i = 1; i < rows.length; i++) {
+    if (!rows[i][0]) continue;
+    notes.push({
+      id: String(rows[i][0]).trim(),
+      title: String(rows[i][1] || ''),
+      content: String(rows[i][2] || ''),
+      imageUrl: String(rows[i][3] || ''),
+      timestamp: String(rows[i][4] || ''),
+      category: String(rows[i][5] || '其他'),
+      pinned: String(rows[i][6]) === 'true' || rows[i][6] === true
+    });
+  }
+  var output = ContentService.createTextOutput(JSON.stringify(notes));
+  output.setMimeType(ContentService.MimeType.JSON);
+  return output;
+}</code></pre>
+            </div>
+
+            <div class="flex justify-end">
+                <button onclick="closeGasCodeModal()" class="px-4 py-2 text-xs font-medium bg-slate-800 text-white rounded-xl">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="categoryManagerModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-slate-100">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-tags text-indigo-600"></i> 管理分類標籤
+                </h3>
+                <button onclick="closeCategoryManager()" class="text-slate-400 hover:text-slate-600 text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="flex gap-2">
+                <input type="text" id="newCategoryInput" placeholder="新增標籤名稱..." 
+                    class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                <button onclick="addCategory()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-xl transition shrink-0">
+                    新增
+                </button>
+            </div>
+
+            <div class="space-y-2 max-h-60 overflow-y-auto pr-1" id="categoryManagerList">
+            </div>
+
+            <div class="flex justify-end pt-2">
+                <button onclick="closeCategoryManager()" class="px-4 py-2 text-xs font-medium bg-slate-800 text-white rounded-xl">完成</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="editCategoryModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 space-y-4 border border-slate-100">
+            <h3 class="text-base font-bold text-slate-800">修改標籤名稱</h3>
+            <input type="hidden" id="editCategoryOldName">
+            <input type="text" id="editCategoryNewInput" placeholder="新標籤名稱..." 
+                class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+            <div class="flex justify-end gap-2">
+                <button onclick="closeEditCategoryModal()" class="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl">取消</button>
+                <button onclick="saveEditCategory()" class="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-xl">儲存</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="imageModal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4" onclick="closeImageModal()">
+        <div class="relative max-w-4xl max-h-[90vh]">
+            <img id="modalImage" src="" alt="放大檢視" class="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl">
+            <button class="absolute -top-10 right-0 text-white text-2xl hover:text-slate-300">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-slate-800 text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 text-xs font-medium">
+        <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400 text-sm"></i>
+        <span id="toastMessage">操作成功</span>
+    </div>
+
+    <script>
+        let notes = JSON.parse(localStorage.getItem('cloud_notes_v2') || '[]');
+        let categories = JSON.parse(localStorage.getItem('cloud_categories_v1') || '["工作", "生活", "學習", "靈感", "其他"]');
+        let currentImageBase64 = '';
+        // imageAction: 'keep' | 'replace' | 'delete'
+        let imageAction = 'keep';
+        let isImageProcessing = false;  // 追蹤圖片是否正在處理中
+        let gasUrl = localStorage.getItem('gas_url') || '';
+        let currentCategoryFilter = '全部';
+
+        window.onload = function() {
+            document.getElementById('gasUrlInput').value = gasUrl;
+            renderCategories();
+            renderNotes();
+            if (gasUrl) {
+                syncWithCloud(true);
+            }
+        };
+
+        function renderCategories() {
+            const chipsContainer = document.getElementById('categoryChipsContainer');
+            let chipsHtml = `<button onclick="filterCategory('全部')" id="cat_全部" class="cat-chip px-3 py-1.5 rounded-xl font-medium transition ${currentCategoryFilter === '全部' ? 'bg-indigo-600 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'} shrink-0">全部</button>`;
+            
+            categories.forEach(cat => {
+                const isActive = currentCategoryFilter === cat;
+                chipsHtml += `<button onclick="filterCategory('${cat}')" id="cat_${cat}" class="cat-chip px-3 py-1.5 rounded-xl font-medium transition ${isActive ? 'bg-indigo-600 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'} shrink-0">${getCategoryEmoji(cat)} ${cat}</button>`;
+            });
+            chipsContainer.innerHTML = chipsHtml;
+
+            const selectEl = document.getElementById('noteCategory');
+            const currentSelected = selectEl.value;
+            selectEl.innerHTML = categories.map(cat => `<option value="${cat}">${getCategoryEmoji(cat)} ${cat}</option>`).join('');
+            if (categories.includes(currentSelected)) {
+                selectEl.value = currentSelected;
+            }
+        }
+
+        function getCategoryEmoji(cat) {
+            switch(cat) {
+                case '工作': return '💼';
+                case '生活': return '🏠';
+                case '學習': return '📚';
+                case '靈感': return '💡';
+                default: return '📌';
+            }
+        }
+
+        function filterCategory(category) {
+            currentCategoryFilter = category;
+            renderCategories();
+            renderNotes();
+        }
+
+        function openCategoryManager() {
+            renderCategoryManagerList();
+            document.getElementById('categoryManagerModal').classList.remove('hidden');
+        }
+        function closeCategoryManager() {
+            document.getElementById('categoryManagerModal').classList.add('hidden');
+            renderCategories();
+            renderNotes();
+        }
+
+        function renderCategoryManagerList() {
+            const listEl = document.getElementById('categoryManagerList');
+            listEl.innerHTML = categories.map((cat, idx) => `
+                <div class="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs">
+                    <span class="font-medium text-slate-700 flex items-center gap-1.5">${getCategoryEmoji(cat)} ${cat}</span>
+                    <div class="flex items-center gap-1">
+                        <button onclick="moveCategory(${idx}, -1)" ${idx === 0 ? 'disabled class="text-slate-200 cursor-not-allowed p-1"' : 'class="text-slate-400 hover:text-indigo-600 p-1"'} title="往上移動">
+                            <i class="fa-solid fa-arrow-up"></i>
+                        </button>
+                        <button onclick="moveCategory(${idx}, 1)" ${idx === categories.length - 1 ? 'disabled class="text-slate-200 cursor-not-allowed p-1"' : 'class="text-slate-400 hover:text-indigo-600 p-1"'} title="往下移動">
+                            <i class="fa-solid fa-arrow-down"></i>
+                        </button>
+                        <button onclick="openEditCategoryModal('${cat}')" class="text-slate-400 hover:text-amber-500 p-1" title="修改標籤">
+                            <i class="fa-solid fa-pen"></i>
+                        </button>
+                        <button onclick="deleteCategory('${cat}')" ${categories.length <= 1 ? 'disabled class="text-slate-200 cursor-not-allowed p-1"' : 'class="text-slate-400 hover:text-rose-500 p-1"'} title="刪除標籤">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function addCategory() {
+            const input = document.getElementById('newCategoryInput');
+            const val = input.value.trim();
+            if (!val) return;
+            if (categories.includes(val)) {
+                showToast('標籤名稱已存在', 'error');
+                return;
+            }
+            categories.push(val);
+            localStorage.setItem('cloud_categories_v1', JSON.stringify(categories));
+            input.value = '';
+            renderCategoryManagerList();
+            showToast('已新增標籤', 'success');
+        }
+
+        function moveCategory(index, direction) {
+            const targetIndex = index + direction;
+            if (targetIndex < 0 || targetIndex >= categories.length) return;
+            const temp = categories[index];
+            categories[index] = categories[targetIndex];
+            categories[targetIndex] = temp;
+            localStorage.setItem('cloud_categories_v1', JSON.stringify(categories));
+            renderCategoryManagerList();
+        }
+
+        function openEditCategoryModal(cat) {
+            document.getElementById('editCategoryOldName').value = cat;
+            document.getElementById('editCategoryNewInput').value = cat;
+            document.getElementById('editCategoryModal').classList.remove('hidden');
+        }
+        function closeEditCategoryModal() {
+            document.getElementById('editCategoryModal').classList.add('hidden');
+        }
+        function saveEditCategory() {
+            const oldName = document.getElementById('editCategoryOldName').value;
+            const newName = document.getElementById('editCategoryNewInput').value.trim();
+            if (!newName) return;
+            if (categories.includes(newName) && newName !== oldName) {
+                showToast('標籤名稱已存在', 'error');
+                return;
+            }
+            const idx = categories.indexOf(oldName);
+            if (idx !== -1) {
+                categories[idx] = newName;
+                localStorage.setItem('cloud_categories_v1', JSON.stringify(categories));
+                notes.forEach(n => {
+                    if (n.category === oldName) n.category = newName;
+                });
+                saveLocalAndRender();
+            }
+            if (currentCategoryFilter === oldName) {
+                currentCategoryFilter = newName;
+            }
+            closeEditCategoryModal();
+            renderCategoryManagerList();
+            showToast('標籤已更新', 'success');
+        }
+
+        function deleteCategory(cat) {
+            if (categories.length <= 1) {
+                showToast('至少需保留一個標籤', 'error');
+                return;
+            }
+            if (!confirm(`確定要刪除標籤 "${cat}" 嗎？該標籤下的筆記將自動歸類至其他標籤`)) return;
+
+            categories = categories.filter(c => c !== cat);
+            localStorage.setItem('cloud_categories_v1', JSON.stringify(categories));
+
+            const fallbackCat = categories[0] || '其他';
+            notes.forEach(n => {
+                if (n.category === cat) n.category = fallbackCat;
+            });
+            saveLocalAndRender();
+
+            if (currentCategoryFilter === cat) {
+                currentCategoryFilter = '全部';
+            }
+            renderCategories();
+            renderCategoryManagerList();
+            showToast('標籤已刪除', 'success');
+        }
+
+        function previewImage(event) {
+            const file = event.target.files[0];
+            if (file) {
+                document.getElementById('fileNameLabel').innerText = file.name;
+                document.getElementById('clearImageBtn').classList.remove('hidden');
+                
+                // 顯示處理中狀態
+                isImageProcessing = true;
+                document.getElementById('imageProcessingOverlay').classList.remove('hidden');
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.onload = function() {
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        let width = img.width;
+                        let height = img.height;
+                        
+                        const MAX_WIDTH = 300;
+                        const MAX_HEIGHT = 300;
+                        if (width > height) {
+                            if (width > MAX_WIDTH) {
+                                height *= MAX_WIDTH / width;
+                                width = MAX_WIDTH;
+                            }
+                        } else {
+                            if (height > MAX_HEIGHT) {
+                                width *= MAX_HEIGHT / height;
+                                height = MAX_HEIGHT;
+                            }
+                        }
+                        
+                        canvas.width = width;
+                        canvas.height = height;
+                        ctx.drawImage(img, 0, 0, width, height);
+                        currentImageBase64 = canvas.toDataURL('image/jpeg', 0.4);
+                        imageAction = 'replace';  // 使用者選擇了新照片
+                        
+                        document.getElementById('imagePreview').src = currentImageBase64;
+                        document.getElementById('imagePreviewContainer').classList.remove('hidden');
+                        
+                        // 處理完成
+                        isImageProcessing = false;
+                        document.getElementById('imageProcessingOverlay').classList.add('hidden');
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function clearImage() {
+            document.getElementById('noteImage').value = '';
+            document.getElementById('fileNameLabel').innerText = '選擇圖片檔案';
+            document.getElementById('clearImageBtn').classList.add('hidden');
+            
+            const previewContainer = document.getElementById('imagePreviewContainer');
+            previewContainer.classList.add('hidden');
+            
+            const previewImg = document.getElementById('imagePreview');
+            previewImg.src = '';
+            
+            currentImageBase64 = '';
+            imageAction = 'delete';  // 標記為刪除照片
+            isImageProcessing = false;
+            document.getElementById('imageProcessingOverlay').classList.add('hidden');
+        }
+
+        function handleFormSubmit(e) {
+            e.preventDefault();
+            
+            // 如果圖片還在處理中，提示使用者稍候
+            if (isImageProcessing) {
+                showToast('圖片處理中，請稍候再儲存', 'error');
+                return;
+            }
+            
+            const editingId = document.getElementById('editingNoteId').value;
+            const title = document.getElementById('noteTitle').value.trim();
+            const content = document.getElementById('noteContent').value.trim();
+            const category = document.getElementById('noteCategory').value;
+            const pinned = document.getElementById('notePinned').checked;
+            
+            if (!title || !content) return;
+
+            const now = new Date();
+            const timestamp = now.getFullYear() + '/' + 
+                String(now.getMonth() + 1).padStart(2, '0') + '/' + 
+                String(now.getDate()).padStart(2, '0') + ' ' + 
+                String(now.getHours()).padStart(2, '0') + ':' + 
+                String(now.getMinutes()).padStart(2, '0') + ':' + 
+                String(now.getSeconds()).padStart(2, '0');
+
+            if (editingId) {
+                const note = notes.find(n => n.id === editingId);
+                if (note) {
+                    note.title = title;
+                    note.content = content;
+                    note.category = category;
+                    note.pinned = pinned;
+                    note.timestamp = timestamp;
+                    
+                    // 根據 imageAction 決定照片處理方式
+                    if (imageAction === 'replace' && currentImageBase64) {
+                        // 有明確的新照片資料才更新
+                        note.imageUrl = currentImageBase64;
+                    } else if (imageAction === 'delete') {
+                        note.imageUrl = '';
+                    }
+                    // imageAction === 'keep' 或 'replace' 但無資料時保持原照片不變
+                }
+                saveLocalAndRender();
+                const updatedNoteCopy = { ...note };
+                cancelEditing();
+                showToast('筆記更新成功！', 'success');
+
+                if (gasUrl) {
+                    sendToCloud('update', updatedNoteCopy);
+                }
+            } else {
+                // 新增筆記：只有當 imageAction === 'replace' 且有資料時才帶照片
+                const newNote = {
+                    id: 'note_' + Date.now() + Math.random().toString(36).substring(2, 7),
+                    title,
+                    content,
+                    imageUrl: (imageAction === 'replace' && currentImageBase64) ? currentImageBase64 : '',
+                    timestamp,
+                    category,
+                    pinned
+                };
+
+                notes.unshift(newNote);
+                saveLocalAndRender();
+                
+                document.getElementById('noteForm').reset();
+                cancelEditing();
+                showToast('筆記新增成功！', 'success');
+
+                if (gasUrl) {
+                    sendToCloud('save', newNote);
+                }
+            }
+        }
+
+        function editNote(id) {
+            const note = notes.find(n => n.id === id);
+            if (!note) return;
+
+            document.getElementById('editingNoteId').value = note.id;
+            document.getElementById('noteTitle').value = note.title;
+            document.getElementById('noteContent').value = note.content;
+            document.getElementById('noteCategory').value = categories.includes(note.category) ? note.category : categories[0];
+            document.getElementById('notePinned').checked = note.pinned;
+
+            if (note.imageUrl) {
+                currentImageBase64 = note.imageUrl;
+                imageAction = 'keep';  // 預設保持原照片
+                document.getElementById('imagePreview').src = note.imageUrl;
+                document.getElementById('imagePreviewContainer').classList.remove('hidden');
+                document.getElementById('fileNameLabel').innerText = '已載入現有相片 (可重新選擇)';
+                document.getElementById('clearImageBtn').classList.remove('hidden');
+            } else {
+                currentImageBase64 = '';
+                imageAction = 'keep';
+                document.getElementById('noteImage').value = '';
+                document.getElementById('fileNameLabel').innerText = '選擇圖片檔案';
+                document.getElementById('clearImageBtn').classList.add('hidden');
+                document.getElementById('imagePreviewContainer').classList.add('hidden');
+                document.getElementById('imagePreview').src = '';
+            }
+            isImageProcessing = false;
+            document.getElementById('imageProcessingOverlay').classList.add('hidden');
+
+            document.getElementById('formHeading').innerHTML = '<i class="fa-solid fa-pen-to-square text-indigo-500"></i> 編輯備忘筆記';
+            document.getElementById('submitBtnText').innerText = '儲存修改';
+            document.getElementById('cancelEditBtn').classList.remove('hidden');
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function cancelEditing() {
+            document.getElementById('editingNoteId').value = '';
+            document.getElementById('noteForm').reset();
+            
+            currentImageBase64 = '';
+            imageAction = 'keep';
+            isImageProcessing = false;
+            document.getElementById('noteImage').value = '';
+            document.getElementById('fileNameLabel').innerText = '選擇圖片檔案';
+            document.getElementById('clearImageBtn').classList.add('hidden');
+            document.getElementById('imagePreviewContainer').classList.add('hidden');
+            document.getElementById('imagePreview').src = '';
+            document.getElementById('imageProcessingOverlay').classList.add('hidden');
+            
+            document.getElementById('formHeading').innerHTML = '<i class="fa-solid fa-pen-nib text-indigo-500"></i> 新增備忘筆記';
+            document.getElementById('submitBtnText').innerText = '新增並記錄時間';
+            document.getElementById('cancelEditBtn').classList.add('hidden');
+        }
+
+        function togglePin(id) {
+            const note = notes.find(n => n.id === id);
+            if (note) {
+                note.pinned = !note.pinned;
+                saveLocalAndRender();
+                showToast(note.pinned ? '已釘選置頂' : '已取消置頂', 'success');
+                if (gasUrl) {
+                    sendToCloud('updatePin', { id: note.id, pinned: note.pinned });
+                }
+            }
+        }
+
+        function deleteNote(id) {
+            if (!confirm('確定要刪除這則筆記嗎？')) return;
+            
+            notes = notes.filter(n => n.id !== id);
+            saveLocalAndRender();
+            showToast('筆記已刪除', 'success');
+
+            if (gasUrl) {
+                sendToCloud('delete', { id });
+            }
+        }
+
+        function saveLocalAndRender() {
+            localStorage.setItem('cloud_notes_v2', JSON.stringify(notes));
+            renderNotes();
+        }
+
+        function renderNotes() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const container = document.getElementById('notesList');
+            const emptyState = document.getElementById('emptyState');
+            
+            const filtered = notes.filter(n => {
+                const matchesCategory = currentCategoryFilter === '全部' || n.category === currentCategoryFilter;
+                const matchesSearch = n.title.toLowerCase().includes(query) || n.content.toLowerCase().includes(query);
+                return matchesCategory && matchesSearch;
+            });
+
+            filtered.sort((a, b) => {
+                if (a.pinned !== b.pinned) {
+                    return a.pinned ? -1 : 1;
+                }
+                return 0;
+            });
+
+            document.getElementById('noteCountText').innerText = '共 ' + filtered.length + ' 則筆記';
+
+            if (filtered.length === 0) {
+                container.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            container.innerHTML = filtered.map(n => `
+                <div class="bg-white p-4 rounded-2xl shadow-sm border ${n.pinned ? 'border-amber-300 ring-1 ring-amber-200 bg-amber-50/20' : 'border-slate-100'} flex flex-col justify-between hover:shadow-md transition group">
+                    <div>
+                        <div class="flex items-start justify-between gap-2 mb-2">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${getCategoryBadgeStyle(n.category)}">${escapeHtml(n.category || '其他')}</span>
+                                <h3 onclick="editNote('${n.id}')" class="font-bold text-slate-800 text-sm line-clamp-1 cursor-pointer hover:text-indigo-600 transition" title="點擊編輯此筆記">${escapeHtml(n.title)}</h3>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <button onclick="editNote('${n.id}')" class="text-slate-300 hover:text-indigo-600 transition p-1" title="編輯筆記">
+                                    <i class="fa-solid fa-pen-to-square text-xs"></i>
+                                </button>
+                                <button onclick="togglePin('${n.id}')" class="transition p-1 ${n.pinned ? 'text-amber-500 hover:text-amber-600' : 'text-slate-300 hover:text-amber-500'}" title="${n.pinned ? '取消置頂' : '釘選置頂'}">
+                                    <i class="fa-solid fa-thumbtack text-xs"></i>
+                                </button>
+                                <button onclick="deleteNote('${n.id}')" class="text-slate-300 hover:text-rose-500 transition p-1" title="刪除筆記">
+                                    <i class="fa-solid fa-trash text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <p onclick="editNote('${n.id}')" class="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed line-clamp-4 mb-3 cursor-pointer hover:text-slate-800 transition" title="點擊編輯此筆記">${escapeHtml(n.content)}</p>
+                        
+                        ${n.imageUrl ? `
+                            <div class="mb-3 rounded-xl overflow-hidden border border-slate-100 h-36 bg-slate-50 cursor-pointer" onclick="openImageModal('${n.imageUrl}')">
+                                <img src="${n.imageUrl}" alt="備忘相片" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+                            </div>
+                        ` : ''}
+                    </div>
+
+                    <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] text-slate-400">
+                        <span class="flex items-center gap-1 font-medium">
+                            <i class="fa-regular fa-clock text-indigo-500"></i> ${n.timestamp}
+                        </span>
+                        ${n.pinned ? '<span class="text-amber-600 font-bold flex items-center gap-1"><i class="fa-solid fa-thumbtack"></i> 置頂中</span>' : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function getCategoryBadgeStyle(category) {
+            switch(category) {
+                case '工作': return 'bg-blue-100 text-blue-700';
+                case '生活': return 'bg-emerald-100 text-emerald-700';
+                case '學習': return 'bg-purple-100 text-purple-700';
+                case '靈感': return 'bg-amber-100 text-amber-700';
+                default: return 'bg-slate-100 text-slate-700';
+            }
+        }
+
+        function openConfigModal() {
+            document.getElementById('configModal').classList.remove('hidden');
+        }
+        function closeConfigModal() {
+            document.getElementById('configModal').classList.add('hidden');
+        }
+        function saveConfig() {
+            const url = document.getElementById('gasUrlInput').value.trim();
+            gasUrl = url;
+            localStorage.setItem('gas_url', url);
+            closeConfigModal();
+            showToast('API 設定已儲存', 'success');
+            if (url) syncWithCloud();
+        }
+
+        function showGasCodeModal() {
+            document.getElementById('gasCodeModal').classList.remove('hidden');
+        }
+        function closeGasCodeModal() {
+            document.getElementById('gasCodeModal').classList.add('hidden');
+        }
+
+        function openImageModal(src) {
+            document.getElementById('modalImage').src = src;
+            document.getElementById('imageModal').classList.remove('hidden');
+        }
+        function closeImageModal() {
+            document.getElementById('imageModal').classList.add('hidden');
+        }
+
+        async function syncWithCloud(isAuto = false) {
+            if (!gasUrl) {
+                if (!isAuto) openConfigModal();
+                return;
+            }
+
+            const syncIcon = document.getElementById('syncIcon');
+            syncIcon.classList.add('fa-spin');
+
+            try {
+                const response = await fetch(gasUrl, { method: 'GET', redirect: 'follow' });
+                if (!response.ok) throw new Error('伺服器回應異常');
+                const cloudNotes = await response.json();
+                
+                if (Array.isArray(cloudNotes)) {
+                    const localMap = new Map(notes.map(n => [n.id, n]));
+                    let addedCount = 0;
+                    cloudNotes.forEach(cn => {
+                        if (cn && cn.id && !localMap.has(String(cn.id))) {
+                            notes.push({
+                                id: String(cn.id),
+                                title: String(cn.title || ''),
+                                content: String(cn.content || ''),
+                                imageUrl: String(cn.imageUrl || ''),
+                                timestamp: String(cn.timestamp || ''),
+                                category: String(cn.category || '其他'),
+                                pinned: Boolean(cn.pinned)
+                            });
+                            addedCount++;
+                        }
+                    });
+                    saveLocalAndRender();
+                    if (!isAuto) showToast(`同步成功！新增 ${addedCount} 則雲端筆記`, 'success');
+                } else {
+                    throw new Error('資料格式不正確');
+                }
+            } catch (error) {
+                console.error(error);
+                if (!isAuto) showToast('同步失敗：請確認 GAS 網址是否正確且已部署為「任何人」存取', 'error');
+            } finally {
+                syncIcon.classList.remove('fa-spin');
+            }
+        }
+
+        async function sendToCloud(action, payload) {
+            if (!gasUrl) return;
+            try {
+                await fetch(gasUrl, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action, ...payload })
+                });
+                console.log('Cloud sync request sent for action:', action, payload);
+            } catch (err) {
+                console.error('Cloud save error:', err);
+                showToast('雲端儲存失敗，已暫存於本機', 'error');
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            const toastIcon = document.getElementById('toastIcon');
+            
+            toastMessage.innerText = message;
+            if (type === 'success') {
+                toastIcon.className = 'fa-solid fa-circle-check text-emerald-400 text-sm';
+            } else {
+                toastIcon.className = 'fa-solid fa-triangle-exclamation text-rose-400 text-sm';
+            }
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
